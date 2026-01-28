@@ -18,8 +18,8 @@ mkdir -p ${APP_NAME}.app/Contents/MacOS
 mkdir -p ${APP_NAME}.app/Contents/Resources
 cp .build/release/${APP_NAME} ${APP_NAME}.app/Contents/MacOS/
 cp Info.plist ${APP_NAME}.app/Contents/
-if [ -f "JugaIcon.svg" ]; then
-    cp JugaIcon.svg ${APP_NAME}.app/Contents/Resources/
+if [ -f "JugaBar.icns" ]; then
+    cp JugaBar.icns ${APP_NAME}.app/Contents/Resources/JugaIcon.icns
 fi
 
 # 3. Zip

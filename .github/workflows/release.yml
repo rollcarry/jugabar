@@ -17,6 +17,11 @@ jobs:
 
       - name: Set up Swift
         uses: swift-actions/setup-swift@v3
+        with:
+          swift-version: "6.2.3"
+
+      - name: Get swift version
+        run: swift --version
 
       - name: Build and Package
         run: |

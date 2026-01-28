@@ -18,5 +18,7 @@
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>CFBundleIconFile</key>
+    <string>JugaIcon</string>
 </dict>
 </plist>
