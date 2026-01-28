@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# Swift Package Manager
+/.build/
+/Packages/
+.swiftpm/
+!/.swiftpm/configuration/
+
+# Xcode (if used)
+build/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+!/Package.swift
+
+# Build Artifacts
+*.app/
+*.zip
+*.dSYM/
+
+# Local configuration
+.netrc
+
+# Editors
+.vscode/
+.idea/
+
+# Gemini Clipboard
+.gemini-clipboard/
