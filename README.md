@@ -34,10 +34,10 @@ The name **JugaBar** is a pun on the famous Korean ice cream **"누가바" (Nuga
 ### Via Homebrew (Recommended)
 
 ```bash
-brew install --cask rollcarry/jugabar/jugabar
+brew install --cask --no-quarantine rollcarry/jugabar/jugabar
 
 # To upgrade
-brew upgrade --cask rollcarry/jugabar/jugabar
+brew upgrade --cask --no-quarantine rollcarry/jugabar/jugabar
 
 ```
 

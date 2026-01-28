@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Swift
-        uses: swift-actions/setup-swift@v2
+        uses: swift-actions/setup-swift@v3
 
       - name: Build and Package
         run: |
@@ -81,10 +81,10 @@ jobs:
             
             To install via Homebrew:
             ```bash
-            brew install --cask rollcarry/jugabar/jugabar
+            brew install --cask --no-quarantine rollcarry/jugabar/jugabar
             
             # To upgrade
-            brew upgrade --cask rollcarry/jugabar/jugabar
+            brew upgrade --cask --no-quarantine rollcarry/jugabar/jugabar
             ```
           draft: false
           prerelease: false
