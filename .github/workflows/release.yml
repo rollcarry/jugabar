@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Swift
+        uses: swift-actions/setup-swift@v2
+
+      - name: Build and Package
+        run: |
+          # Extract version from tag (e.g., v1.0.1 -> 1.0.1)
+          export VERSION=${GITHUB_REF_NAME#v}
+          chmod +x build_dist.sh
+          ./build_dist.sh
+          
+          ZIP_NAME="JugaBar-v${VERSION}.zip"
+          echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
+          echo "SHA256=$(shasum -a 256 ${ZIP_NAME} | awk '{ print $1 }')" >> $GITHUB_ENV
+
+      - name: Update Homebrew Cask
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          SHA256=${{ env.SHA256 }}
+          CASK_PATH="Casks/jugabar.rb"
+          
+          echo "Debugging Cask file presence and content:"
+          ls -l $CASK_PATH
+          cat $CASK_PATH
+          echo "--- End of Debugging Output ---"
+          
+          # Update version and sha256 in the cask file
+          sed -i '' "s/version \".*\"/version \"$VERSION\"/" $CASK_PATH
+          sed -i '' "s/sha256 \".*\"/sha256 \"$SHA256\"/" $CASK_PATH
+          
+          # Commit changes
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add $CASK_PATH
+          git commit -m "chore: update homebrew cask to v$VERSION"
+          
+          # Pull latest main and rebase, then push
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          # Get the previous tag, if it exists
+          PREV_TAG=$(git describe --tags --abbrev=0 ${{ github.ref_name }}^ 2>/dev/null || echo "")
+          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+          if [ -z "$PREV_TAG" ]; then
+            git log --oneline | head -n 10 >> $GITHUB_OUTPUT
+          else
+            git log ${PREV_TAG}..${{ github.ref_name }} --oneline >> $GITHUB_OUTPUT
+          fi
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP_NAME }}
+          body: |
+            ## Changelog
+            ${{ steps.changelog.outputs.CHANGELOG }}
+            
+            ---
+            **SHA256 Checksum:**
+            `${{ env.SHA256 }}`
+            
+            To install via Homebrew:
+            ```bash
+            brew install --cask rollcarry/jugabar/jugabar
+            
+            # To upgrade
+            brew upgrade --cask rollcarry/jugabar/jugabar
+            ```
+          draft: false
+          prerelease: false
