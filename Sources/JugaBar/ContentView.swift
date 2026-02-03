@@ -238,7 +238,7 @@ struct ContentView: View {
                 .padding()
             }
         }
-        .frame(width: 320)
+        .frame(width: 360)
         .onAppear {
             if stockService.refreshInterval == 0 {
                 Task {
@@ -290,20 +290,26 @@ struct StockRow: View {
                     .font(.system(size: 13, weight: .medium))
                 
                 if isPortfolioMode, let quantity = stock.quantity, quantity > 0 {
-                    Text("\(quantity) shares")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(Color.secondary.opacity(0.1))
-                        .cornerRadius(4)
+                    HStack(spacing: 4) {
+                        Text("\(quantity) shares")
+                        if let avg = stock.averagePrice {
+                            Text("@\(Int(avg).formattedWithSeparator)")
+                                .foregroundColor(.secondary.opacity(0.7))
+                        }
+                    }
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(Color.secondary.opacity(0.1))
+                    .cornerRadius(4)
                 } else {
                     Text(stock.id)
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
                 }
             }
-            .frame(width: 90, alignment: .leading)
+            .frame(width: 140, alignment: .leading)
             .contentShape(Rectangle())
             // No tap gesture here anymore
             
