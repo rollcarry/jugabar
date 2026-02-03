@@ -33,6 +33,9 @@ struct StockExchange: Codable {
 struct CompToPrev: Codable {
     let code: String
     let text: String
+    
+    var isRising: Bool { ["1", "2"].contains(code) }
+    var isFalling: Bool { ["4", "5"].contains(code) }
 }
 
 struct Stock: Identifiable, Codable {
@@ -91,14 +94,14 @@ struct Stock: Identifiable, Codable {
     var dailyGain: Double {
         guard let quantity = quantity else { return 0.0 }
         var change = changeAmountDouble
-        if isFalling { change = -change }
+        if isFalling && change > 0 { change = -change }
         return change * Double(quantity)
     }
     
     var nxtDailyGain: Double {
         guard let quantity = quantity else { return 0.0 }
         var change = nxtChangeAmountDouble
-        if isNxtFalling { change = -change }
+        if isNxtFalling && change > 0 { change = -change }
         return change * Double(quantity)
     }
     
@@ -271,6 +274,24 @@ class StockService: ObservableObject {
         saveData()
     }
     
+    func addBuy(id: String, price: Double, quantity: Int) {
+        guard quantity > 0 else { return }
+        
+        var newQuantity = quantity
+        var newAveragePrice = price
+        
+        if let currentItem = portfolioStorage[id] {
+            let totalOldValue = (currentItem.averagePrice ?? 0.0) * Double(currentItem.quantity)
+            let totalNewValue = price * Double(quantity)
+            let totalQuantity = currentItem.quantity + quantity
+            
+            newQuantity = totalQuantity
+            newAveragePrice = (totalOldValue + totalNewValue) / Double(totalQuantity)
+        }
+        
+        updatePortfolio(id: id, quantity: newQuantity, averagePrice: newAveragePrice)
+    }
+    
     func resetPortfolio() {
         portfolioStorage = [:]
         portfolioCodes = []
@@ -303,8 +324,8 @@ class StockService: ObservableObject {
                 let (data, _) = try await session.data(from: url)
                 let info = try JSONDecoder().decode(StockItem.self, from: data)
                 
-                let isRising = info.compareToPreviousPrice.code == "2"
-                let isFalling = info.compareToPreviousPrice.code == "5"
+                let isRising = info.compareToPreviousPrice.isRising
+                let isFalling = info.compareToPreviousPrice.isFalling
                 let isMainOpen = info.marketStatus == "OPEN"
                 let isNxtOpen = info.overMarketPriceInfo?.overMarketStatus == "OPEN"
                 
@@ -320,8 +341,8 @@ class StockService: ObservableObject {
                     nxtPrice: info.overMarketPriceInfo?.overPrice,
                     nxtChangeRate: info.overMarketPriceInfo?.fluctuationsRatio,
                     nxtChangeAmount: info.overMarketPriceInfo?.compareToPreviousClosePrice,
-                    isNxtRising: info.overMarketPriceInfo?.compareToPreviousPrice?.code == "2",
-                    isNxtFalling: info.overMarketPriceInfo?.compareToPreviousPrice?.code == "5",
+                    isNxtRising: info.overMarketPriceInfo?.compareToPreviousPrice?.isRising ?? false,
+                    isNxtFalling: info.overMarketPriceInfo?.compareToPreviousPrice?.isFalling ?? false,
                     isNxtOpen: isNxtOpen,
                     isMainOpen: isMainOpen
                 )
@@ -348,8 +369,8 @@ class StockService: ObservableObject {
             let (data, _) = try await session.data(from: url)
             let info = try JSONDecoder().decode(StockItem.self, from: data)
             
-            let isRising = info.compareToPreviousPrice.code == "2"
-            let isFalling = info.compareToPreviousPrice.code == "5"
+            let isRising = info.compareToPreviousPrice.isRising
+            let isFalling = info.compareToPreviousPrice.isFalling
             
             let isMainOpen = info.marketStatus == "OPEN"
             let isNxtOpen = info.overMarketPriceInfo?.overMarketStatus == "OPEN"
@@ -371,8 +392,8 @@ class StockService: ObservableObject {
                 nxtPrice: info.overMarketPriceInfo?.overPrice,
                 nxtChangeRate: info.overMarketPriceInfo?.fluctuationsRatio,
                 nxtChangeAmount: info.overMarketPriceInfo?.compareToPreviousClosePrice,
-                isNxtRising: info.overMarketPriceInfo?.compareToPreviousPrice?.code == "2",
-                isNxtFalling: info.overMarketPriceInfo?.compareToPreviousPrice?.code == "5",
+                isNxtRising: info.overMarketPriceInfo?.compareToPreviousPrice?.isRising ?? false,
+                isNxtFalling: info.overMarketPriceInfo?.compareToPreviousPrice?.isFalling ?? false,
                 isNxtOpen: isNxtOpen,
                 isMainOpen: isMainOpen,
                 quantity: portfolioItem?.quantity,

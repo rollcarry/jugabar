@@ -9,7 +9,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         // 1. Create the Popover
         let popover = NSPopover()
-        popover.contentSize = NSSize(width: 320, height: 600)
         popover.behavior = .transient
         popover.contentViewController = NSHostingController(rootView: ContentView())
         self.popover = popover
@@ -53,6 +52,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func showPopover(_ sender: NSStatusBarButton) {
         NotificationCenter.default.post(name: .resetUI, object: nil)
+        
+        if let controller = popover.contentViewController {
+            controller.view.layoutSubtreeIfNeeded()
+            popover.contentSize = controller.view.fittingSize
+        }
+        
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)
         

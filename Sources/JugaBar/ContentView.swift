@@ -6,6 +6,7 @@ struct ContentView: View {
     @State private var showSettings: Bool = false
     @State private var showSearch: Bool = false
     @State private var editingStock: Stock? = nil // For portfolio edit sheet
+    @State private var addingBuyStock: Stock? = nil // For add buy sheet
     @State private var isPortfolioMode: Bool = false
 
     var body: some View {
@@ -133,6 +134,9 @@ struct ContentView: View {
                                 editingStock = stock
                             })
                             .contextMenu {
+                                Button("Add Buy") {
+                                    addingBuyStock = stock
+                                }
                                 Button("Edit Portfolio") {
                                     editingStock = stock
                                 }
@@ -244,6 +248,9 @@ struct ContentView: View {
         }
         .sheet(item: $editingStock) { stock in
             PortfolioEditView(stock: stock, stockService: stockService, isPresented: $editingStock)
+        }
+        .sheet(item: $addingBuyStock) { stock in
+            AddBuyView(stock: stock, stockService: stockService, isPresented: $addingBuyStock)
         }
         .onReceive(NotificationCenter.default.publisher(for: .resetUI)) { _ in
             showSettings = false
@@ -666,5 +673,61 @@ struct PerformanceBadge: View {
 extension Int {
     var formattedWithSeparator: String {
         return NumberFormatter.localizedString(from: NSNumber(value: self), number: .decimal)
+    }
+}
+
+struct AddBuyView: View {
+    let stock: Stock
+    @ObservedObject var stockService: StockService
+    @Binding var isPresented: Stock?
+    
+    @State private var quantity: String = ""
+    @State private var price: String = ""
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Add Buy: \(stock.name)")
+                .font(.headline)
+            
+            Divider()
+            
+            VStack(alignment: .leading) {
+                Text("Additional Quantity")
+                    .font(.caption)
+                TextField("0", text: $quantity)
+                    .textFieldStyle(.roundedBorder)
+            }
+            
+            VStack(alignment: .leading) {
+                Text("Buy Price (per share)")
+                    .font(.caption)
+                TextField("Price", text: $price)
+                    .textFieldStyle(.roundedBorder)
+            }
+            
+            HStack {
+                Button("Cancel") {
+                    isPresented = nil
+                }
+                
+                Spacer()
+                
+                Button("Add") {
+                    if let q = Int(quantity), let p = Double(price) {
+                        stockService.addBuy(id: stock.id, price: p, quantity: q)
+                        isPresented = nil
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(Int(quantity) == nil || Double(price) == nil)
+            }
+        }
+        .padding()
+        .frame(width: 250)
+        .onAppear {
+            // Default to current price (removing commas)
+            let cleanPrice = stock.price.replacingOccurrences(of: ",", with: "")
+            price = cleanPrice
+        }
     }
 }
