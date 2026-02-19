@@ -1,6 +1,6 @@
 cask "jugabar" do
-  version "1.0.3"
-  sha256 "ef43770f4e28cf5960af373254b8ae92988ec7f4d59c6b2f56b021d4f1099518"
+  version "1.0.4"
+  sha256 "2192aef8e9c9bb1215d61d00871064a64fa93361550aac294b69fc84c237cde7"
 
   url "https://github.com/rollcarry/jugabar/releases/download/v#{version}/JugaBar-v#{version}.zip"
   name "JugaBar"
