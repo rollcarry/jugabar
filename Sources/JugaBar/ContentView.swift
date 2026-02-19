@@ -1,10 +1,12 @@
 import SwiftUI
 import ServiceManagement
+import Charts
 
 struct ContentView: View {
     @StateObject private var stockService = StockService()
     @State private var showSettings: Bool = false
     @State private var showSearch: Bool = false
+    @State private var showChart: Bool = false
     @State private var editingStock: Stock? = nil // For portfolio edit sheet
     @State private var addingBuyStock: Stock? = nil // For add buy sheet
     @State private var isPortfolioMode: Bool = false
@@ -13,11 +15,12 @@ struct ContentView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                if showSettings || showSearch {
+                if showSettings || showSearch || showChart {
                     Button(action: {
                         withAnimation {
                             showSettings = false
                             showSearch = false
+                            showChart = false
                         }
                     }) {
                         Image(systemName: "chevron.left")
@@ -32,7 +35,7 @@ struct ContentView: View {
                 
                 Spacer()
                 
-                if !showSettings && !showSearch {
+                if !showSettings && !showSearch && !showChart {
                     Button(action: {
                         Task {
                             await stockService.fetchAll()
@@ -68,6 +71,10 @@ struct ContentView: View {
             } else if showSearch {
                 SearchView(stockService: stockService, showSearch: $showSearch)
                     .frame(height: 350)
+                    .transition(.opacity)
+            } else if showChart {
+                 PortfolioChartView(stockService: stockService, showChart: $showChart)
+                    .frame(height: 550)
                     .transition(.opacity)
             } else {
                 // 1. Market Indices Section (Top)
@@ -152,9 +159,10 @@ struct ContentView: View {
                 
                 Divider()
                 
-                // 3. Portfolio Summary (Bottom - Always visible if holdings exist)
-                if stockService.totalPortfolioValue > 0 {
+                // 3. Portfolio Summary (Visible only in Portfolio Mode if holdings exist)
+                if isPortfolioMode && stockService.totalPortfolioValue > 0 {
                     VStack(spacing: 4) {
+                        // Row 1: Total Value
                         HStack {
                             Text("Total Portfolio Value")
                                 .font(.caption)
@@ -164,14 +172,14 @@ struct ContentView: View {
                                 .font(.system(size: 13, weight: .bold))
                         }
                         
+                        // Row 2: Daily Change
                         HStack {
-                            Text(isPortfolioMode ? "Total Return" : "Daily Change")
+                            Text("Daily Change")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             Spacer()
                             
                             if !stockService.isMainMarketOpen && stockService.stocks.contains(where: { $0.nxtPrice != nil }) {
-                                // NXT data is available (even if closed), and Main is closed
                                 VStack(alignment: .trailing, spacing: 0) {
                                     HStack(spacing: 4) {
                                         let isAnyNxtOpen = stockService.stocks.contains(where: { $0.isNxtOpen })
@@ -183,23 +191,48 @@ struct ContentView: View {
                                             .cornerRadius(3)
                                             .foregroundColor(isAnyNxtOpen ? .orange : .secondary)
                                         
-                                        let nxtGain = isPortfolioMode ? stockService.totalReturn : stockService.totalNxtDailyGain
-                                        Text((nxtGain > 0 ? "+" : "") + "\(Int(nxtGain).formattedWithSeparator) 원")
+                                        let nxtDaily = stockService.totalNxtDailyGain
+                                        Text((nxtDaily > 0 ? "+" : "") + "\(Int(nxtDaily).formattedWithSeparator) 원")
                                             .font(.system(size: 13, weight: .bold))
-                                            .foregroundColor(nxtGain >= 0 ? .red : .blue)
+                                            .foregroundColor(nxtDaily >= 0 ? .red : .blue)
                                     }
-                                    
-                                    let krxGain = isPortfolioMode ? stockService.totalKrxReturn : stockService.totalDailyGain
-                                    Text("KRX " + (krxGain > 0 ? "+" : "") + "\(Int(krxGain).formattedWithSeparator)")
+                                    let krxDaily = stockService.totalDailyGain
+                                    Text("KRX " + (krxDaily > 0 ? "+" : "") + "\(Int(krxDaily).formattedWithSeparator)")
                                         .font(.system(size: 9))
                                         .foregroundColor(.secondary)
                                 }
                             } else {
-                                // Standard Main Market or Closed
-                                let gain = isPortfolioMode ? stockService.totalReturn : stockService.totalDailyGain
+                                let gain = stockService.totalDailyGain
                                 Text((gain > 0 ? "+" : "") + "\(Int(gain).formattedWithSeparator) 원")
                                     .font(.system(size: 13, weight: .bold))
                                     .foregroundColor(gain >= 0 ? .red : .blue)
+                            }
+                        }
+
+                        // Row 3: Total Return
+                        HStack {
+                            Text("Total Return")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            
+                            if !stockService.isMainMarketOpen && stockService.stocks.contains(where: { $0.nxtPrice != nil }) {
+                                VStack(alignment: .trailing, spacing: 0) {
+                                    let nxtReturn = stockService.totalReturn
+                                    Text((nxtReturn > 0 ? "+" : "") + "\(Int(nxtReturn).formattedWithSeparator) 원")
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundColor(nxtReturn >= 0 ? .red : .blue)
+                                    
+                                    let krxReturn = stockService.totalKrxReturn
+                                    Text("KRX " + (krxReturn > 0 ? "+" : "") + "\(Int(krxReturn).formattedWithSeparator)")
+                                        .font(.system(size: 9))
+                                        .foregroundColor(.secondary)
+                                }
+                            } else {
+                                let totalReturn = stockService.totalReturn
+                                Text((totalReturn > 0 ? "+" : "") + "\(Int(totalReturn).formattedWithSeparator) 원")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(totalReturn >= 0 ? .red : .blue)
                             }
                         }
                     }
@@ -214,6 +247,20 @@ struct ContentView: View {
                         .toggleStyle(.switch)
                         .controlSize(.mini)
                         .font(.caption)
+                    
+                    if isPortfolioMode {
+                        Button(action: {
+                            withAnimation {
+                                showChart = true
+                            }
+                        }) {
+                            Image(systemName: "chart.pie")
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("View Allocation")
+                        .padding(.leading, 8)
+                    }
                     
                     Spacer()
                     
@@ -255,6 +302,7 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .resetUI)) { _ in
             showSettings = false
             showSearch = false
+            showChart = false
             if stockService.refreshInterval == 0 {
                 Task {
                     await stockService.fetchAll()
@@ -268,6 +316,7 @@ struct ContentView: View {
     private var viewTitle: String {
         if showSettings { return "Settings" }
         if showSearch { return "Add Stock" }
+        if showChart { return "Allocation" }
         return isPortfolioMode ? "Portfolio" : "JugaBar"
     }
     
@@ -283,6 +332,10 @@ struct StockRow: View {
     let isPortfolioMode: Bool
     let onEdit: () -> Void
     
+    var currencyPrefix: String {
+        return stock.marketType == "US" ? "$" : ""
+    }
+    
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
@@ -293,7 +346,7 @@ struct StockRow: View {
                     HStack(spacing: 4) {
                         Text("\(quantity) shares")
                         if let avg = stock.averagePrice {
-                            Text("@\(Int(avg).formattedWithSeparator)")
+                            Text("@\(currencyPrefix)\(Int(avg).formattedWithSeparator)") // US stocks often have decimals, Int might truncate cents.
                                 .foregroundColor(.secondary.opacity(0.7))
                         }
                     }
@@ -318,7 +371,7 @@ struct StockRow: View {
             VStack(alignment: .trailing, spacing: 2) {
                 if stock.isMainOpen {
                     // Only KRX during main hours
-                    Text(stock.price)
+                    Text(currencyPrefix + stock.price)
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(colorFor(stock: stock))
                 } else if let nxtPrice = stock.nxtPrice {
@@ -340,7 +393,7 @@ struct StockRow: View {
                                 .cornerRadius(3)
                         }
                         
-                        Text(nxtPrice)
+                        Text(currencyPrefix + nxtPrice)
                             .font(.system(size: 13, weight: .bold))
                         
                         let nxtRate = stock.nxtChangeRate ?? stock.changeRate
@@ -355,20 +408,24 @@ struct StockRow: View {
                         .foregroundColor(.secondary)
                 } else {
                     // Default to KRX if no NXT data
-                    Text(stock.price)
+                    Text(currencyPrefix + stock.price)
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(colorFor(stock: stock))
                 }
                 
                 if isPortfolioMode, let quantity = stock.quantity, quantity > 0 {
+                    Text("\(currencyPrefix)\(Int(stock.totalValue).formattedWithSeparator)")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.primary)
+
                     if stock.isMainOpen {
                         if let totalGain = stock.totalGain {
-                            Text((totalGain > 0 ? "+" : "") + "\(Int(totalGain).formattedWithSeparator)")
+                            Text((totalGain > 0 ? "+" : "") + "\(currencyPrefix)\(Int(totalGain).formattedWithSeparator)")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundColor(totalGain >= 0 ? .red : .blue)
                         } else {
                             let gain = stock.dailyGain
-                            Text((gain > 0 ? "+" : "") + "\(Int(gain).formattedWithSeparator)")
+                            Text((gain > 0 ? "+" : "") + "\(currencyPrefix)\(Int(gain).formattedWithSeparator)")
                                 .font(.system(size: 11))
                                 .foregroundColor(gain >= 0 ? .red : .blue)
                         }
@@ -377,7 +434,7 @@ struct StockRow: View {
                         VStack(alignment: .trailing, spacing: 0) {
                             let totalGain = stock.totalGain ?? 0
                             
-                            Text((totalGain > 0 ? "+" : "") + "\(Int(totalGain).formattedWithSeparator)")
+                            Text((totalGain > 0 ? "+" : "") + "\(currencyPrefix)\(Int(totalGain).formattedWithSeparator)")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundColor(totalGain >= 0 ? .red : .blue)
                             
@@ -390,7 +447,7 @@ struct StockRow: View {
                     } else {
                         // Closed - show final KRX
                         if let totalGain = stock.totalGain {
-                            Text((totalGain > 0 ? "+" : "") + "\(Int(totalGain).formattedWithSeparator)")
+                            Text((totalGain > 0 ? "+" : "") + "\(currencyPrefix)\(Int(totalGain).formattedWithSeparator)")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundColor(totalGain >= 0 ? .red : .blue)
                         }
@@ -478,7 +535,9 @@ struct SearchView: View {
             TextField("Search name or code", text: $query)
                 .textFieldStyle(.roundedBorder)
                 .onChange(of: query) { newValue in
-                    results = stockService.searchStocks(query: newValue)
+                    Task {
+                        results = await stockService.searchStocks(query: newValue)
+                    }
                 }
             
             List(results) { result in
@@ -735,5 +794,74 @@ struct AddBuyView: View {
             let cleanPrice = stock.price.replacingOccurrences(of: ",", with: "")
             price = cleanPrice
         }
+    }
+}
+
+struct PortfolioChartView: View {
+    @ObservedObject var stockService: StockService
+    @Binding var showChart: Bool
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            // Chart
+            if stockService.totalPortfolioValue > 0 {
+                Chart(stockService.stocks.filter { ($0.quantity ?? 0) > 0 }) { stock in
+                    let value = (stock.marketType == "US") ? stock.totalValue * stockService.exchangeRate : stock.totalValue
+                    SectorMark(
+                        angle: .value("Value", value),
+                        innerRadius: .ratio(0.5),
+                        angularInset: 1.5
+                    )
+                    .foregroundStyle(by: .value("Name", stock.name))
+                    .cornerRadius(5)
+                }
+                .frame(height: 350)
+                .chartLegend(.hidden)
+                .padding()
+                
+                // Legend
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(stockService.stocks.filter { ($0.quantity ?? 0) > 0 }) { stock in
+                            HStack {
+                                Text(stock.name)
+                                    .font(.caption)
+                                    .lineLimit(1)
+                                
+                                Spacer()
+                                
+                                let value = (stock.marketType == "US") ? stock.totalValue * stockService.exchangeRate : stock.totalValue
+                                Text("\(Int(value).formattedWithSeparator) 원")
+                                    .font(.caption)
+                                    .fontWeight(.bold)
+                                
+                                Text("\(String(format: "%.1f", (value / stockService.totalPortfolioValue) * 100))%")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 40, alignment: .trailing)
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            } else {
+                Spacer()
+                Text("No portfolio data available.")
+                    .foregroundColor(.secondary)
+                Spacer()
+            }
+            
+            Spacer()
+            
+            Button("Done") {
+                withAnimation {
+                    showChart = false
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .controlSize(.regular)
+            .padding()
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 }

@@ -137,11 +137,59 @@ struct MarketStock: Codable {
     let stockName: String
 }
 
+struct YahooChartResponse: Codable {
+    let chart: YahooChartResult
+}
+
+struct YahooChartResult: Codable {
+    let result: [YahooChartMetaWrapper]?
+    let error: YahooError?
+}
+
+struct YahooError: Codable {
+    let code: String
+    let description: String
+}
+
+struct YahooChartMetaWrapper: Codable {
+    let meta: YahooMeta
+}
+
+struct YahooMeta: Codable {
+    let symbol: String
+    let regularMarketPrice: Double
+    let previousClose: Double?
+    let chartPreviousClose: Double?
+    let longName: String?
+    let shortName: String?
+    let instrumentType: String?
+}
+
+struct YahooSearchResponse: Codable {
+    let quotes: [YahooQuote]
+}
+
+struct YahooQuote: Codable {
+    let symbol: String
+    let shortname: String?
+    let longname: String?
+    let quoteType: String?
+    let exchange: String?
+}
+
 struct SearchResult: Identifiable {
     let id: String
     let code: String
     let name: String
     let marketType: String?
+}
+
+struct ExchangeRateResponse: Codable {
+    let exchangeInfo: ExchangeInfo
+}
+
+struct ExchangeInfo: Codable {
+    let closePrice: String
 }
 
 @MainActor
@@ -150,6 +198,7 @@ class StockService: ObservableObject {
     @Published var marketIndices: [Stock] = []
     @Published var isMarketOpen: Bool = false
     @Published var isMainMarketOpen: Bool = false
+    @Published var exchangeRate: Double = 1.0 // USD to KRW
     @Published var refreshInterval: Double {
         didSet {
             UserDefaults.standard.set(refreshInterval, forKey: "refreshInterval")
@@ -170,23 +219,45 @@ class StockService: ObservableObject {
     }
     
     var totalPortfolioValue: Double {
-        stocks.reduce(0) { $0 + $1.totalValue }
+        stocks.reduce(0) {
+            let val = $1.totalValue
+            return $0 + ($1.marketType == "US" ? val * exchangeRate : val)
+        }
     }
     
     var totalDailyGain: Double {
-        stocks.reduce(0) { $0 + $1.dailyGain }
+        stocks.reduce(0) {
+            let val = $1.dailyGain
+            return $0 + ($1.marketType == "US" ? val * exchangeRate : val)
+        }
     }
     
     var totalNxtDailyGain: Double {
-        stocks.reduce(0) { $0 + $1.nxtDailyGain }
+        stocks.reduce(0) {
+            let val = $1.nxtDailyGain
+            return $0 + ($1.marketType == "US" ? val * exchangeRate : val)
+        }
     }
     
     var totalReturn: Double {
-        stocks.reduce(0) { $0 + ($1.totalGain ?? 0.0) }
+        stocks.reduce(0) {
+            let val = $1.totalGain ?? 0.0
+            return $0 + ($1.marketType == "US" ? val * exchangeRate : val)
+        }
     }
     
     var totalKrxReturn: Double {
-        stocks.reduce(0) { $0 + ($1.krxTotalGain ?? 0.0) }
+        stocks.reduce(0) {
+            let val = $1.krxTotalGain ?? 0.0
+            // KRX Return is strictly KRX, but if we mix, we should respect currency?
+            // Actually 'krxTotalGain' was a specific property for dual-listed or main market.
+            // For US stocks, this might not apply or be same as totalGain.
+            // Let's assume US stocks don't have separate 'KRX' gain.
+            if $1.marketType == "US" { return $0 } // Skip US for KRX specific total? Or include converted?
+            // Context: totalKrxReturn was used to show "KRX" secondary line. 
+            // If I have US stocks, they shouldn't contribute to "KRX" line.
+            return $0 + val
+        }
     }
     
     // Performance Calculations for "Game"
@@ -197,6 +268,8 @@ class StockService: ObservableObject {
     }
     
     func getUserPerformance(market: String) -> Double {
+        // Only filter stocks that match the market type (KS/KQ).
+        // US stocks (marketType "US") should be ignored here as they don't belong to KOSPI/KOSDAQ.
         let filteredStocks = stocks.filter { ($0.marketType ?? "KS") == market && ($0.quantity ?? 0) > 0 }
         guard !filteredStocks.isEmpty else { return 0.0 }
         
@@ -223,6 +296,7 @@ class StockService: ObservableObject {
         loadData()
         
         Task {
+            await fetchExchangeRate() // Fetch rate first
             await fetchAll()
             await buildStockDatabase()
         }
@@ -238,7 +312,22 @@ class StockService: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(refreshInterval * 1_000_000_000))
                 await fetchAll()
+                await fetchExchangeRate() // Update rate periodically
             }
+        }
+    }
+    
+    private func fetchExchangeRate() async {
+        guard let url = URL(string: "https://api.stock.naver.com/marketindex/exchange/FX_USDKRW") else { return }
+        do {
+            let (data, _) = try await session.data(from: url)
+            let response = try JSONDecoder().decode(ExchangeRateResponse.self, from: data)
+            let clean = response.exchangeInfo.closePrice.replacingOccurrences(of: ",", with: "")
+            if let rate = Double(clean) {
+                self.exchangeRate = rate
+            }
+        } catch {
+            print("Exchange Rate Fetch Error: \(error)")
         }
     }
     
@@ -247,7 +336,11 @@ class StockService: ObservableObject {
             portfolioCodes.append(code)
             saveData()
             Task {
-                await fetchStock(code: code)
+                if isUSStock(code) {
+                    await fetchYahooStock(code: code)
+                } else {
+                    await fetchStock(code: code)
+                }
             }
         }
     }
@@ -301,20 +394,120 @@ class StockService: ObservableObject {
         saveData()
     }
     
+    func isUSStock(_ code: String) -> Bool {
+        return code.rangeOfCharacter(from: .letters) != nil
+    }
+
     func fetchAll() async {
         await fetchMarketIndices()
         for code in portfolioCodes {
-            await fetchStock(code: code)
+            if isUSStock(code) {
+                await fetchYahooStock(code: code)
+            } else {
+                await fetchStock(code: code)
+            }
         }
     }
     
-    func searchStocks(query: String) -> [SearchResult] {
+    func searchStocks(query: String) async -> [SearchResult] {
         guard !query.isEmpty else { return [] }
-        return stockDatabase.filter {
+        
+        // Local Search (Korea)
+        let localResults = stockDatabase.filter {
             $0.name.lowercased().contains(query.lowercased()) || $0.code.contains(query)
         }
+        
+        // Remote Search (Yahoo/US) if query has letters
+        var yahooResults: [SearchResult] = []
+        if query.rangeOfCharacter(from: .letters) != nil {
+            yahooResults = await searchYahooStocks(query: query)
+        }
+        
+        return localResults + yahooResults
     }
     
+    private func searchYahooStocks(query: String) async -> [SearchResult] {
+        guard let url = URL(string: "https://query1.finance.yahoo.com/v1/finance/search?q=\(query)&quotesCount=5&newsCount=0") else { return [] }
+        
+        var request = URLRequest(url: url)
+        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        
+        do {
+            let (data, _) = try await session.data(for: request)
+            let response = try JSONDecoder().decode(YahooSearchResponse.self, from: data)
+            
+            return response.quotes.compactMap { quote in
+                guard let symbol = quote.symbol.split(separator: ".").first else { return nil } // remove exchange suffix if present for simplicity? No, keep it for precision if needed, but simple US tickers don't have it.
+                // Actually keep full symbol if it's not simple
+                let cleanSymbol = quote.symbol 
+                
+                return SearchResult(
+                    id: cleanSymbol,
+                    code: cleanSymbol,
+                    name: quote.shortname ?? quote.longname ?? cleanSymbol,
+                    marketType: "US"
+                )
+            }
+        } catch {
+            print("Yahoo Search Error: \(error)")
+            return []
+        }
+    }
+
+    private func fetchYahooStock(code: String) async {
+        guard let url = URL(string: "https://query1.finance.yahoo.com/v8/finance/chart/\(code)?interval=1d&range=1d") else { return }
+        
+        var request = URLRequest(url: url)
+        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        
+        do {
+            let (data, _) = try await session.data(for: request)
+            let response = try JSONDecoder().decode(YahooChartResponse.self, from: data)
+            
+            guard let result = response.chart.result?.first?.meta else { return }
+            
+            let currentPrice = result.regularMarketPrice
+            // Calculate change from previous close
+            let prevClose = result.chartPreviousClose ?? result.previousClose ?? currentPrice
+            let changeAmount = currentPrice - prevClose
+            let changeRate = prevClose != 0 ? (changeAmount / prevClose) * 100.0 : 0.0
+            
+            let isRising = changeAmount > 0
+            let isFalling = changeAmount < 0
+            
+            // Format strings
+            let priceStr = String(format: "%.2f", currentPrice)
+            let changeAmountStr = String(format: "%.2f", abs(changeAmount))
+            let changeRateStr = String(format: "%.2f", abs(changeRate))
+            
+            let portfolioItem = portfolioStorage[code]
+            
+            let newStock = Stock(
+                id: result.symbol,
+                name: result.shortName ?? result.longName ?? result.symbol,
+                price: priceStr,
+                changeAmount: changeAmountStr,
+                changeRate: changeRateStr,
+                isRising: isRising,
+                isFalling: isFalling,
+                marketType: "US",
+                nxtPrice: nil,
+                nxtChangeRate: nil,
+                nxtChangeAmount: nil,
+                isNxtRising: false,
+                isNxtFalling: false,
+                isNxtOpen: false,
+                isMainOpen: true, // Simplified
+                quantity: portfolioItem?.quantity,
+                averagePrice: portfolioItem?.averagePrice
+            )
+            
+            updateOrAppend(stock: newStock)
+        } catch {
+            print("Fetching error for \(code): \(error)")
+        }
+    }
+
     private func fetchMarketIndices() async {
         let codes = ["KOSPI", "KOSDAQ"]
         for code in codes {
