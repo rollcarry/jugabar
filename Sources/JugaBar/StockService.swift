@@ -61,14 +61,14 @@ struct Stock: Identifiable, Codable {
     
     // Calculated Properties
     var currentPriceDouble: Double {
-        if isNxtOpen, let nxt = nxtPrice {
+        if !isMainOpen, let nxt = nxtPrice {
             return parsePrice(nxt)
         }
         return parsePrice(price)
     }
     
     var currentChangeRateDouble: Double {
-        if isNxtOpen, let nxtRate = nxtChangeRate {
+        if !isMainOpen, let nxtRate = nxtChangeRate {
             return parsePrice(nxtRate)
         }
         return parsePrice(changeRate)
@@ -192,6 +192,24 @@ struct ExchangeInfo: Codable {
     let closePrice: String
 }
 
+enum SortMode: String, Codable, CaseIterable {
+    case manual = "Manual"
+    case value = "Value"
+    case gain = "Return %"
+    case daily = "Daily %"
+    case name = "Name"
+    
+    var icon: String {
+        switch self {
+        case .manual: return "hand.tap"
+        case .value: return "dollarsign.circle"
+        case .gain: return "chart.line.uptrend.xyaxis"
+        case .daily: return "percent"
+        case .name: return "textformat.abc"
+        }
+    }
+}
+
 @MainActor
 class StockService: ObservableObject {
     @Published var stocks: [Stock] = []
@@ -199,6 +217,12 @@ class StockService: ObservableObject {
     @Published var isMarketOpen: Bool = false
     @Published var isMainMarketOpen: Bool = false
     @Published var exchangeRate: Double = 1.0 // USD to KRW
+    @Published var sortMode: SortMode = .manual {
+        didSet {
+            UserDefaults.standard.set(sortMode.rawValue, forKey: "sortMode")
+            sortStocks()
+        }
+    }
     @Published var refreshInterval: Double {
         didSet {
             UserDefaults.standard.set(refreshInterval, forKey: "refreshInterval")
@@ -350,6 +374,58 @@ class StockService: ObservableObject {
         portfolioStorage.removeValue(forKey: id)
         stocks.removeAll { $0.id == id }
         saveData()
+    }
+    
+    func moveStock(from source: IndexSet, to destination: Int) {
+        // Switch to manual mode if user drags
+        sortMode = .manual
+        
+        // Move in 'stocks' array for UI feedback
+        stocks.move(fromOffsets: source, toOffset: destination)
+        
+        // Update 'portfolioCodes' to match the new order
+        var updatedCodes = stocks.map { $0.id }
+        
+        // Preserve any codes that are in portfolioCodes but currently not in stocks (e.g., failed to fetch)
+        for code in portfolioCodes {
+            if !updatedCodes.contains(code) {
+                updatedCodes.append(code)
+            }
+        }
+        
+        portfolioCodes = updatedCodes
+        saveData()
+    }
+    
+    func sortStocks() {
+        switch sortMode {
+        case .manual:
+            stocks.sort {
+                guard let idx1 = portfolioCodes.firstIndex(of: $0.id),
+                      let idx2 = portfolioCodes.firstIndex(of: $1.id) else { return false }
+                return idx1 < idx2
+            }
+        case .value:
+            stocks.sort {
+                let v1 = ($0.marketType == "US" ? $0.totalValue * exchangeRate : $0.totalValue)
+                let v2 = ($1.marketType == "US" ? $1.totalValue * exchangeRate : $1.totalValue)
+                return v1 > v2
+            }
+        case .gain:
+            stocks.sort {
+                let g1 = $0.averagePrice != nil && $0.averagePrice! > 0 ? (($0.currentPriceDouble - $0.averagePrice!) / $0.averagePrice!) : -1.0
+                let g2 = $1.averagePrice != nil && $1.averagePrice! > 0 ? (($1.currentPriceDouble - $1.averagePrice!) / $1.averagePrice!) : -1.0
+                return g1 > g2
+            }
+        case .daily:
+            stocks.sort {
+                return $0.currentChangeRateDouble > $1.currentChangeRateDouble
+            }
+        case .name:
+            stocks.sort {
+                return $0.name < $1.name
+            }
+        }
     }
     
     func updatePortfolio(id: String, quantity: Int?, averagePrice: Double?) {
@@ -599,21 +675,16 @@ class StockService: ObservableObject {
         }
     }
     
-    private func updateOrAppend(stock: Stock) {
-        if let index = stocks.firstIndex(where: { $0.id == stock.id }) {
-            stocks[index] = stock
-        } else {
-            stocks.append(stock)
+        private func updateOrAppend(stock: Stock) {
+            if let index = stocks.firstIndex(where: { $0.id == stock.id }) {
+                stocks[index] = stock
+            } else {
+                stocks.append(stock)
+            }
+            sortStocks()
         }
-        stocks.sort {
-            guard let idx1 = portfolioCodes.firstIndex(of: $0.id),
-                  let idx2 = portfolioCodes.firstIndex(of: $1.id) else { return false }
-            return idx1 < idx2
-        }
-    }
     
-    private func saveData() {
-        UserDefaults.standard.set(portfolioCodes, forKey: "portfolioStockCodes")
+        private func saveData() {        UserDefaults.standard.set(portfolioCodes, forKey: "portfolioStockCodes")
         if let encoded = try? JSONEncoder().encode(portfolioStorage) {
             UserDefaults.standard.set(encoded, forKey: "portfolioStorage")
         }
@@ -631,6 +702,11 @@ class StockService: ObservableObject {
     private func loadData() {
         if let savedCodes = UserDefaults.standard.array(forKey: "portfolioStockCodes") as? [String] {
             portfolioCodes = savedCodes
+        }
+        
+        if let savedSort = UserDefaults.standard.string(forKey: "sortMode"),
+           let mode = SortMode(rawValue: savedSort) {
+            sortMode = mode
         }
         
         if let savedPortfolio = UserDefaults.standard.data(forKey: "portfolioStorage"),

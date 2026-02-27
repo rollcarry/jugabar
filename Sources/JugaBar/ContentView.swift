@@ -36,6 +36,27 @@ struct ContentView: View {
                 Spacer()
                 
                 if !showSettings && !showSearch && !showChart {
+                    Menu {
+                        ForEach(SortMode.allCases, id: \.self) { mode in
+                            Button(action: {
+                                stockService.sortMode = mode
+                            }) {
+                                HStack {
+                                    Text(mode.rawValue)
+                                    if stockService.sortMode == mode {
+                                        Image(systemName: "checkmark")
+                                    }
+                                    Image(systemName: mode.icon)
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                            .foregroundColor(stockService.sortMode == .manual ? .secondary : .accentColor)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Sort Stocks")
+                    
                     Button(action: {
                         Task {
                             await stockService.fetchAll()
@@ -152,6 +173,7 @@ struct ContentView: View {
                                 }
                             }
                         }
+                        .onMove(perform: stockService.moveStock)
                     }
                     .listStyle(.plain)
                     .frame(height: 400)
@@ -194,7 +216,7 @@ struct ContentView: View {
                                         let nxtDaily = stockService.totalNxtDailyGain
                                         Text((nxtDaily > 0 ? "+" : "") + "\(Int(nxtDaily).formattedWithSeparator) 원")
                                             .font(.system(size: 13, weight: .bold))
-                                            .foregroundColor(nxtDaily >= 0 ? .red : .blue)
+                                            .foregroundColor(nxtDaily > 0 ? .red : (nxtDaily < 0 ? .blue : .primary))
                                     }
                                     let krxDaily = stockService.totalDailyGain
                                     Text("KRX " + (krxDaily > 0 ? "+" : "") + "\(Int(krxDaily).formattedWithSeparator)")
@@ -205,7 +227,7 @@ struct ContentView: View {
                                 let gain = stockService.totalDailyGain
                                 Text((gain > 0 ? "+" : "") + "\(Int(gain).formattedWithSeparator) 원")
                                     .font(.system(size: 13, weight: .bold))
-                                    .foregroundColor(gain >= 0 ? .red : .blue)
+                                    .foregroundColor(gain > 0 ? .red : (gain < 0 ? .blue : .primary))
                             }
                         }
 
@@ -221,7 +243,7 @@ struct ContentView: View {
                                     let nxtReturn = stockService.totalReturn
                                     Text((nxtReturn > 0 ? "+" : "") + "\(Int(nxtReturn).formattedWithSeparator) 원")
                                         .font(.system(size: 13, weight: .bold))
-                                        .foregroundColor(nxtReturn >= 0 ? .red : .blue)
+                                        .foregroundColor(nxtReturn > 0 ? .red : (nxtReturn < 0 ? .blue : .primary))
                                     
                                     let krxReturn = stockService.totalKrxReturn
                                     Text("KRX " + (krxReturn > 0 ? "+" : "") + "\(Int(krxReturn).formattedWithSeparator)")
@@ -321,6 +343,11 @@ struct ContentView: View {
     }
     
     private func colorFor(stock: Stock) -> Color {
+        if !stock.isMainOpen && stock.nxtPrice != nil {
+            if stock.isNxtRising { return .red }
+            if stock.isNxtFalling { return .blue }
+            return .primary
+        }
         if stock.isRising { return .red }
         if stock.isFalling { return .blue }
         return .primary
@@ -422,12 +449,12 @@ struct StockRow: View {
                         if let totalGain = stock.totalGain {
                             Text((totalGain > 0 ? "+" : "") + "\(currencyPrefix)\(Int(totalGain).formattedWithSeparator)")
                                 .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(totalGain >= 0 ? .red : .blue)
+                                .foregroundColor(totalGain > 0 ? .red : (totalGain < 0 ? .blue : .primary))
                         } else {
                             let gain = stock.dailyGain
                             Text((gain > 0 ? "+" : "") + "\(currencyPrefix)\(Int(gain).formattedWithSeparator)")
                                 .font(.system(size: 11))
-                                .foregroundColor(gain >= 0 ? .red : .blue)
+                                .foregroundColor(gain > 0 ? .red : (gain < 0 ? .blue : .primary))
                         }
                     } else if stock.nxtPrice != nil {
                         // Show NXT Gain Primary, KRX Gain Secondary (even after 8:00 PM)
@@ -436,7 +463,7 @@ struct StockRow: View {
                             
                             Text((totalGain > 0 ? "+" : "") + "\(currencyPrefix)\(Int(totalGain).formattedWithSeparator)")
                                 .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(totalGain >= 0 ? .red : .blue)
+                                .foregroundColor(totalGain > 0 ? .red : (totalGain < 0 ? .blue : .primary))
                             
                             if let krxTotal = stock.krxTotalGain {
                                 Text("KRX \(Int(krxTotal).formattedWithSeparator)")
@@ -449,7 +476,7 @@ struct StockRow: View {
                         if let totalGain = stock.totalGain {
                             Text((totalGain > 0 ? "+" : "") + "\(currencyPrefix)\(Int(totalGain).formattedWithSeparator)")
                                 .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(totalGain >= 0 ? .red : .blue)
+                                .foregroundColor(totalGain > 0 ? .red : (totalGain < 0 ? .blue : .primary))
                         }
                     }
                 } else if stock.isMainOpen {
@@ -464,6 +491,11 @@ struct StockRow: View {
     }
     
     private func colorFor(stock: Stock) -> Color {
+        if !stock.isMainOpen && stock.nxtPrice != nil {
+            if stock.isNxtRising { return .red }
+            if stock.isNxtFalling { return .blue }
+            return .primary
+        }
         if stock.isRising { return .red }
         if stock.isFalling { return .blue }
         return .primary
