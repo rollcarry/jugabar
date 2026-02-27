@@ -69,13 +69,19 @@ struct Stock: Identifiable, Codable {
     
     var currentChangeRateDouble: Double {
         if !isMainOpen, let nxtRate = nxtChangeRate {
-            return parsePrice(nxtRate)
+            var rate = parsePrice(nxtRate)
+            if isNxtFalling && rate > 0 { rate = -rate }
+            return rate
         }
-        return parsePrice(changeRate)
+        var rate = parsePrice(changeRate)
+        if isFalling && rate > 0 { rate = -rate }
+        return rate
     }
     
     var changeRateDouble: Double {
-        return parsePrice(changeRate)
+        var rate = parsePrice(changeRate)
+        if isFalling && rate > 0 { rate = -rate }
+        return rate
     }
     
     var changeAmountDouble: Double {
