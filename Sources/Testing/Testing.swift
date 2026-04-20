@@ -1,5 +1,5 @@
 import Foundation
-@testable import JugaBarCore
+import JugaBarCore
 
 public struct TestCase {
     let name: String
