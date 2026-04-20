@@ -9,9 +9,42 @@ let package = Package(
         .macOS(.v14)
     ],
     targets: [
-        // Targets are the basic building blocks of a package, defining a module or a test suite.
-        // Targets can depend on other targets in this package and products from dependencies.
+        .target(
+            name: "JugaBarCore",
+            path: "Sources/JugaBar",
+            sources: [
+                "StockModels.swift",
+                "Int+Formatting.swift"
+            ]
+        ),
         .executableTarget(
-            name: "JugaBar"),
+            name: "JugaBar",
+            dependencies: ["JugaBarCore"],
+            path: "Sources/JugaBar",
+            sources: [
+                "AddBuyView.swift",
+                "AppDelegate.swift",
+                "ContentView.swift",
+                "JugaBarApp.swift",
+                "NotificationExtension.swift",
+                "PerformanceBadge.swift",
+                "PortfolioChartView.swift",
+                "PortfolioEditView.swift",
+                "SearchView.swift",
+                "SettingsView.swift",
+                "StockRow.swift",
+                "StockService.swift"
+            ]
+        ),
+        .target(
+            name: "Testing",
+            dependencies: ["JugaBarCore"],
+            path: "Sources/Testing",
+            sources: ["Testing.swift"]
+        ),
+        .testTarget(
+            name: "JugaBarTests",
+            dependencies: ["Testing"]
+        ),
     ]
 )
