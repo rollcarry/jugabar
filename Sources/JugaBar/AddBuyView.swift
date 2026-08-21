@@ -21,6 +21,7 @@ struct AddBuyView: View {
                     .font(.caption)
                 TextField("0", text: $quantity)
                     .textFieldStyle(.roundedBorder)
+                    .onSubmit(addBuy)
             }
             
             VStack(alignment: .leading) {
@@ -28,6 +29,7 @@ struct AddBuyView: View {
                     .font(.caption)
                 TextField("Price", text: $price)
                     .textFieldStyle(.roundedBorder)
+                    .onSubmit(addBuy)
             }
             
             HStack {
@@ -37,14 +39,10 @@ struct AddBuyView: View {
                 
                 Spacer()
                 
-                Button("Add") {
-                    if let q = Int(quantity), let p = Double(price) {
-                        stockService.addBuy(id: stock.id, price: p, quantity: q)
-                        isPresented = nil
-                    }
-                }
+                Button("Add", action: addBuy)
                 .buttonStyle(.borderedProminent)
                 .disabled(Int(quantity) == nil || Double(price) == nil)
+                .keyboardShortcut(.defaultAction)
             }
         }
         .padding()
@@ -53,6 +51,13 @@ struct AddBuyView: View {
             // Default to current price (removing commas)
             let cleanPrice = stock.price.replacingOccurrences(of: ",", with: "")
             price = cleanPrice
+        }
+    }
+
+    private func addBuy() {
+        if let q = Int(quantity), let p = Double(price) {
+            stockService.addBuy(id: stock.id, price: p, quantity: q)
+            isPresented = nil
         }
     }
 }

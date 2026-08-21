@@ -66,7 +66,7 @@ struct SettingsView: View {
                         stockService.resetPortfolio()
                     }
                 } message: {
-                    Text("This will clear all holdings AND remove all stocks from your list.")
+                    Text("This will clear all holdings, cash, and remove all stocks from your list.")
                 }
             }
             

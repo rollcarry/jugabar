@@ -111,6 +111,51 @@ private enum StockModelTests {
             },
             TestCase("formattedWithSeparator adds thousands separator") {
                 try TestRunner.expect((1234567).formattedWithSeparator == "1,234,567", "Expected thousands separator formatting")
+            },
+            TestCase("cash contributes to portfolio value but not gains") {
+                let stock = makeStock(
+                    price: "10,000",
+                    changeAmount: "100",
+                    changeRate: "1.0",
+                    isFalling: false,
+                    nxtPrice: nil,
+                    nxtChangeAmount: nil,
+                    nxtChangeRate: nil,
+                    isNxtFalling: false,
+                    isMainOpen: true,
+                    quantity: 2,
+                    averagePrice: 9_000
+                )
+
+                try TestRunner.expectEqual(PortfolioMetrics.stockValue(stocks: [stock], exchangeRate: 1), 20_000, accuracy: 0.0001)
+                try TestRunner.expectEqual(PortfolioMetrics.totalValue(stocks: [stock], cashBalance: 50_000, exchangeRate: 1), 70_000, accuracy: 0.0001)
+                try TestRunner.expectEqual(PortfolioMetrics.dailyGain(stocks: [stock], exchangeRate: 1), 200, accuracy: 0.0001)
+                try TestRunner.expectEqual(PortfolioMetrics.totalReturn(stocks: [stock], exchangeRate: 1), 2_000, accuracy: 0.0001)
+            },
+            TestCase("flat holdings still count as win over negative market") {
+                let stock = makeStock(
+                    price: "10,000",
+                    changeAmount: "0",
+                    changeRate: "0.0",
+                    isFalling: false,
+                    nxtPrice: nil,
+                    nxtChangeAmount: nil,
+                    nxtChangeRate: nil,
+                    isNxtFalling: false,
+                    isMainOpen: true,
+                    quantity: 1,
+                    averagePrice: 10_000
+                )
+
+                let userPerformance = PortfolioMetrics.userPerformance(stocks: [stock], market: "KS")
+                try TestRunner.expect(PortfolioMetrics.hasHoldings(stocks: [stock], market: "KS"), "Expected flat KOSPI holding to count as a holding")
+                try TestRunner.expectEqual(userPerformance, 0, accuracy: 0.0001)
+                try TestRunner.expect(userPerformance > -1.0, "Expected 0% user performance to beat a -1% market")
+            },
+            TestCase("cash-only portfolio has no market holdings") {
+                try TestRunner.expectEqual(PortfolioMetrics.totalValue(stocks: [], cashBalance: 50_000, exchangeRate: 1), 50_000, accuracy: 0.0001)
+                try TestRunner.expect(!PortfolioMetrics.hasHoldings(stocks: [], market: "KS"), "Cash should not count as KOSPI holdings")
+                try TestRunner.expectEqual(PortfolioMetrics.userPerformance(stocks: [], market: "KS"), 0, accuracy: 0.0001)
             }
         ]
     }

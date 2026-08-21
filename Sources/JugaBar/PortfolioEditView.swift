@@ -21,6 +21,7 @@ struct PortfolioEditView: View {
                     .font(.caption)
                 TextField("0", text: $quantity)
                     .textFieldStyle(.roundedBorder)
+                    .onSubmit(save)
             }
             
             VStack(alignment: .leading) {
@@ -28,6 +29,7 @@ struct PortfolioEditView: View {
                     .font(.caption)
                 TextField("Price per share", text: $avgPrice)
                     .textFieldStyle(.roundedBorder)
+                    .onSubmit(save)
             }
             
             HStack {
@@ -37,13 +39,9 @@ struct PortfolioEditView: View {
                 
                 Spacer()
                 
-                Button("Save") {
-                    let q = Int(quantity)
-                    let p = Double(avgPrice)
-                    stockService.updatePortfolio(id: stock.id, quantity: q, averagePrice: p)
-                    isPresented = nil
-                }
+                Button("Save", action: save)
                 .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
             }
         }
         .padding()
@@ -52,5 +50,12 @@ struct PortfolioEditView: View {
             if let q = stock.quantity { quantity = String(q) }
             if let p = stock.averagePrice { avgPrice = String(Int(p)) }
         }
+    }
+
+    private func save() {
+        let q = Int(quantity)
+        let p = Double(avgPrice)
+        stockService.updatePortfolio(id: stock.id, quantity: q, averagePrice: p)
+        isPresented = nil
     }
 }

@@ -9,6 +9,11 @@ class StockService: ObservableObject {
     @Published var isMarketOpen: Bool = false
     @Published var isMainMarketOpen: Bool = false
     @Published var exchangeRate: Double = 1.0 // USD to KRW
+    @Published var cashBalance: Double = 0.0 {
+        didSet {
+            saveData()
+        }
+    }
     @Published var sortMode: SortMode = .manual {
         didSet {
             UserDefaults.standard.set(sortMode.rawValue, forKey: "sortMode")
@@ -34,18 +39,16 @@ class StockService: ObservableObject {
         return Double(clean) ?? 0.0
     }
     
+    var totalStockValue: Double {
+        PortfolioMetrics.stockValue(stocks: stocks, exchangeRate: exchangeRate)
+    }
+
     var totalPortfolioValue: Double {
-        stocks.reduce(0) {
-            let val = $1.totalValue
-            return $0 + ($1.marketType == "US" ? val * exchangeRate : val)
-        }
+        PortfolioMetrics.totalValue(stocks: stocks, cashBalance: cashBalance, exchangeRate: exchangeRate)
     }
     
     var totalDailyGain: Double {
-        stocks.reduce(0) {
-            let val = $1.dailyGain
-            return $0 + ($1.marketType == "US" ? val * exchangeRate : val)
-        }
+        PortfolioMetrics.dailyGain(stocks: stocks, exchangeRate: exchangeRate)
     }
     
     var totalNxtDailyGain: Double {
@@ -56,23 +59,13 @@ class StockService: ObservableObject {
     }
     
     var totalReturn: Double {
-        stocks.reduce(0) {
-            let val = $1.totalGain ?? 0.0
-            return $0 + ($1.marketType == "US" ? val * exchangeRate : val)
-        }
+        PortfolioMetrics.totalReturn(stocks: stocks, exchangeRate: exchangeRate)
     }
     
     var totalKrxReturn: Double {
         stocks.reduce(0) {
             let val = $1.krxTotalGain ?? 0.0
-            // KRX Return is strictly KRX, but if we mix, we should respect currency?
-            // Actually 'krxTotalGain' was a specific property for dual-listed or main market.
-            // For US stocks, this might not apply or be same as totalGain.
-            // Let's assume US stocks don't have separate 'KRX' gain.
-            if $1.marketType == "US" { return $0 } // Skip US for KRX specific total? Or include converted?
-            // Context: totalKrxReturn was used to show "KRX" secondary line. 
-            // If I have US stocks, they shouldn't contribute to "KRX" line.
-            return $0 + val
+            return $0 + ($1.marketType == "US" ? val * exchangeRate : val)
         }
     }
     
@@ -84,21 +77,11 @@ class StockService: ObservableObject {
     }
     
     func getUserPerformance(market: String) -> Double {
-        // Only filter stocks that match the market type (KS/KQ).
-        // US stocks (marketType "US") should be ignored here as they don't belong to KOSPI/KOSDAQ.
-        let filteredStocks = stocks.filter { ($0.marketType ?? "KS") == market && ($0.quantity ?? 0) > 0 }
-        guard !filteredStocks.isEmpty else { return 0.0 }
-        
-        let totalValue = filteredStocks.reduce(0) { $0 + $1.totalValue }
-        guard totalValue > 0 else { return 0.0 }
-        
-        // Use percentage change based on current prices (including NXT)
-        var totalWeightedChange: Double = 0.0
-        for stock in filteredStocks {
-            let weight = stock.totalValue / totalValue
-            totalWeightedChange += stock.currentChangeRateDouble * weight
-        }
-        return totalWeightedChange
+        PortfolioMetrics.userPerformance(stocks: stocks, market: market)
+    }
+
+    func hasHoldings(market: String) -> Bool {
+        PortfolioMetrics.hasHoldings(stocks: stocks, market: market)
     }
     
     init() {
@@ -256,9 +239,11 @@ class StockService: ObservableObject {
     func resetPortfolio() {
         portfolioStorage = [:]
         portfolioCodes = []
+        cashBalance = 0
         stocks = []
         UserDefaults.standard.removeObject(forKey: "portfolioStockCodes")
         UserDefaults.standard.removeObject(forKey: "portfolioStorage")
+        UserDefaults.standard.removeObject(forKey: "cashBalance")
         saveData()
     }
     
@@ -405,7 +390,8 @@ class StockService: ObservableObject {
                     isNxtRising: info.overMarketPriceInfo?.compareToPreviousPrice?.isRising ?? false,
                     isNxtFalling: info.overMarketPriceInfo?.compareToPreviousPrice?.isFalling ?? false,
                     isNxtOpen: isNxtOpen,
-                    isMainOpen: isMainOpen
+                    isMainOpen: isMainOpen,
+                    nxtLabel: "NXT"
                 )
                 updateOrAppendIndex(stock: index)
             } catch {
@@ -457,6 +443,7 @@ class StockService: ObservableObject {
                 isNxtFalling: info.overMarketPriceInfo?.compareToPreviousPrice?.isFalling ?? false,
                 isNxtOpen: isNxtOpen,
                 isMainOpen: isMainOpen,
+                nxtLabel: "NXT",
                 quantity: portfolioItem?.quantity,
                 averagePrice: portfolioItem?.averagePrice
             )
@@ -467,19 +454,21 @@ class StockService: ObservableObject {
         }
     }
     
-        private func updateOrAppend(stock: Stock) {
-            if let index = stocks.firstIndex(where: { $0.id == stock.id }) {
-                stocks[index] = stock
-            } else {
-                stocks.append(stock)
-            }
-            sortStocks()
+    private func updateOrAppend(stock: Stock) {
+        if let index = stocks.firstIndex(where: { $0.id == stock.id }) {
+            stocks[index] = stock
+        } else {
+            stocks.append(stock)
         }
+        sortStocks()
+    }
     
-        private func saveData() {        UserDefaults.standard.set(portfolioCodes, forKey: "portfolioStockCodes")
+    private func saveData() {
+        UserDefaults.standard.set(portfolioCodes, forKey: "portfolioStockCodes")
         if let encoded = try? JSONEncoder().encode(portfolioStorage) {
             UserDefaults.standard.set(encoded, forKey: "portfolioStorage")
         }
+        UserDefaults.standard.set(cashBalance, forKey: "cashBalance")
     }
     
     private func migrateOldData() {
@@ -504,6 +493,10 @@ class StockService: ObservableObject {
         if let savedPortfolio = UserDefaults.standard.data(forKey: "portfolioStorage"),
            let decoded = try? JSONDecoder().decode([String: PortfolioItem].self, from: savedPortfolio) {
             portfolioStorage = decoded
+        }
+
+        if UserDefaults.standard.object(forKey: "cashBalance") != nil {
+            cashBalance = UserDefaults.standard.double(forKey: "cashBalance")
         }
     }
     

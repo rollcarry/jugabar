@@ -5,9 +5,9 @@ struct PerformanceBadge: View {
     let user: Double
     let market: Double
     let isOpen: Bool
+    let hasHoldings: Bool
     
     var isWin: Bool { user > market }
-    var hasHoldings: Bool { abs(user) > 0.0001 }
 
     var body: some View {
         HStack(spacing: 4) {

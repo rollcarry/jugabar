@@ -14,7 +14,8 @@ let package = Package(
             path: "Sources/JugaBar",
             sources: [
                 "StockModels.swift",
-                "Int+Formatting.swift"
+                "Int+Formatting.swift",
+                "PortfolioMetrics.swift"
             ]
         ),
         .executableTarget(
@@ -24,6 +25,8 @@ let package = Package(
             sources: [
                 "AddBuyView.swift",
                 "AppDelegate.swift",
+                "CashEditView.swift",
+                "CashRow.swift",
                 "ContentView.swift",
                 "JugaBarApp.swift",
                 "NotificationExtension.swift",

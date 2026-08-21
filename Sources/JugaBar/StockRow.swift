@@ -51,19 +51,12 @@ struct StockRow: View {
                 } else if let nxtPrice = stock.nxtPrice {
                     // Both during non-main hours if NXT data exists (even if NXT is now closed)
                     HStack(spacing: 4) {
-                        if stock.isNxtOpen {
-                            Text("NXT")
+                        if let label = stock.nxtLabel {
+                            Text(label + (stock.isNxtOpen ? "" : "·F"))
                                 .font(.system(size: 8, weight: .heavy))
                                 .padding(.horizontal, 3)
                                 .padding(.vertical, 1)
-                                .background(Color.orange.opacity(0.2))
-                                .cornerRadius(3)
-                        } else {
-                            Text("NXT·F")
-                                .font(.system(size: 8, weight: .heavy))
-                                .padding(.horizontal, 3)
-                                .padding(.vertical, 1)
-                                .background(Color.secondary.opacity(0.2))
+                                .background(stock.isNxtOpen ? Color.orange.opacity(0.2) : Color.secondary.opacity(0.2))
                                 .cornerRadius(3)
                         }
                         
@@ -76,8 +69,9 @@ struct StockRow: View {
                     }
                     .foregroundColor(colorFor(stock: stock))
                     
-                    // KRX Secondary
-                    Text("KRX \(stock.price) (\(stock.changeRate)%)")
+                    // Secondary Price
+                    let secondaryLabel = stock.marketType == "US" ? "REG" : "KRX"
+                    Text("\(secondaryLabel) \(stock.price) (\(stock.changeRate)%)")
                         .font(.system(size: 9))
                         .foregroundColor(.secondary)
                 } else {
@@ -113,7 +107,8 @@ struct StockRow: View {
                                 .foregroundColor(totalGain > 0 ? .red : (totalGain < 0 ? .blue : .primary))
                             
                             if let krxTotal = stock.krxTotalGain {
-                                Text("KRX \(Int(krxTotal).formattedWithSeparator)")
+                                let label = stock.marketType == "US" ? "REG" : "KRX"
+                                Text("\(label) \(Int(krxTotal).formattedWithSeparator)")
                                     .font(.system(size: 8))
                                     .foregroundColor(.secondary)
                             }

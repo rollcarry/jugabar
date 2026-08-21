@@ -10,10 +10,12 @@ The name is a pun on the "Nugabar" ice cream, sounding like "Check the stock pri
 *   **Language:** Swift 5.9+
 *   **Framework:** SwiftUI, Combine
 *   **Platform:** macOS 13.0 (Ventura) or later
-*   **Data Source:** Naver Finance (Internal API)
+*   **Data Source:** Naver Finance (KR stocks), Yahoo Finance (US stocks).
 
 ### Key Features
-*   **Nextade (NXT) Integration:** Supports extended trading hours (08:00 - 20:00) with dual-market price display.
+*   **Nextade (NXT) Integration:** Supports extended trading hours (08:00 - 20:00) with dual-market price display for Korean stocks.
+*   **US Stock Tracking:** Real-time price tracking for US markets (NASDAQ/NYSE) via Yahoo Finance integration (regular session prices).
+*   **Cash Management:** Track cash balances alongside stock holdings for a complete portfolio view.
 *   **"Beat the Market" Gaming:** Value-weighted portfolio performance comparison against KOSPI/KOSDAQ indices.
 *   **Smart Refresh:** Efficient data fetching with support for auto-intervals or "Manual on Click" mode.
 *   **Portfolio Management:** Tracks holdings, average buy prices, and calculates real-time gains/returns.

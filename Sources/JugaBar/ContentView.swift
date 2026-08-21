@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var showChart: Bool = false
     @State private var editingStock: Stock? = nil // For portfolio edit sheet
     @State private var addingBuyStock: Stock? = nil // For add buy sheet
+    @State private var showCashEdit: Bool = false
     @State private var isPortfolioMode: Bool = false
 
     var body: some View {
@@ -127,10 +128,10 @@ struct ContentView: View {
                 }
 
                 // Gaming Feature: Beat the Market Summary
-                if stockService.totalPortfolioValue > 0 {
+                if stockService.totalStockValue > 0 {
                     HStack(spacing: 8) {
-                        PerformanceBadge(title: "KOSPI", user: stockService.getUserPerformance(market: "KS"), market: stockService.getMarketPerformance(market: "KS"), isOpen: stockService.isMarketOpen)
-                        PerformanceBadge(title: "KOSDAQ", user: stockService.getUserPerformance(market: "KQ"), market: stockService.getMarketPerformance(market: "KQ"), isOpen: stockService.isMarketOpen)
+                        PerformanceBadge(title: "KOSPI", user: stockService.getUserPerformance(market: "KS"), market: stockService.getMarketPerformance(market: "KS"), isOpen: stockService.isMarketOpen, hasHoldings: stockService.hasHoldings(market: "KS"))
+                        PerformanceBadge(title: "KOSDAQ", user: stockService.getUserPerformance(market: "KQ"), market: stockService.getMarketPerformance(market: "KQ"), isOpen: stockService.isMarketOpen, hasHoldings: stockService.hasHoldings(market: "KQ"))
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
@@ -140,7 +141,7 @@ struct ContentView: View {
                 }
                 
                 // 2. Stock List (Middle)
-                if stockService.stocks.isEmpty {
+                if stockService.stocks.isEmpty && !(isPortfolioMode && stockService.cashBalance > 0) {
                     VStack(spacing: 12) {
                         Spacer()
                         Image(systemName: "chart.line.uptrend.xyaxis")
@@ -174,6 +175,13 @@ struct ContentView: View {
                             }
                         }
                         .onMove(perform: stockService.moveStock)
+
+                        if isPortfolioMode && stockService.cashBalance > 0 {
+                            CashRow(amount: stockService.cashBalance) {
+                                showCashEdit = true
+                            }
+                            .moveDisabled(true)
+                        }
                     }
                     .listStyle(.plain)
                     .frame(height: 400)
@@ -246,7 +254,10 @@ struct ContentView: View {
                                         .foregroundColor(nxtReturn > 0 ? .red : (nxtReturn < 0 ? .blue : .primary))
                                     
                                     let krxReturn = stockService.totalKrxReturn
-                                    Text("KRX " + (krxReturn > 0 ? "+" : "") + "\(Int(krxReturn).formattedWithSeparator)")
+                                    let hasUS = stockService.stocks.contains { $0.marketType == "US" }
+                                    let hasKRX = stockService.stocks.contains { $0.marketType != "US" }
+                                    let label = (hasUS && hasKRX) ? "REG/KRX" : (hasUS ? "REG" : "KRX")
+                                    Text("\(label) " + (krxReturn > 0 ? "+" : "") + "\(Int(krxReturn).formattedWithSeparator)")
                                         .font(.system(size: 9))
                                         .foregroundColor(.secondary)
                                 }
@@ -271,16 +282,26 @@ struct ContentView: View {
                         .font(.caption)
                     
                     if isPortfolioMode {
-                        Button(action: {
-                            withAnimation {
-                                showChart = true
+                        Menu {
+                            Button(action: {
+                                showCashEdit = true
+                            }) {
+                                Label("Edit Cash", systemImage: "banknote")
                             }
-                        }) {
-                            Image(systemName: "chart.pie")
-                                .foregroundColor(.secondary)
+
+                            Button(action: {
+                                withAnimation {
+                                    showChart = true
+                                }
+                            }) {
+                                Label("Allocation", systemImage: "chart.pie")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .foregroundColor(stockService.cashBalance > 0 ? .accentColor : .secondary)
                         }
                         .buttonStyle(.borderless)
-                        .help("View Allocation")
+                        .help("Portfolio Actions")
                         .padding(.leading, 8)
                     }
                     
@@ -320,6 +341,9 @@ struct ContentView: View {
         }
         .sheet(item: $addingBuyStock) { stock in
             AddBuyView(stock: stock, stockService: stockService, isPresented: $addingBuyStock)
+        }
+        .sheet(isPresented: $showCashEdit) {
+            CashEditView(stockService: stockService, isPresented: $showCashEdit)
         }
         .onReceive(NotificationCenter.default.publisher(for: .resetUI)) { _ in
             showSettings = false

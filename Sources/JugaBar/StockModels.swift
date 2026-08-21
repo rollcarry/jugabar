@@ -50,6 +50,7 @@ public struct Stock: Identifiable, Codable {
     public let nxtPrice: String?
     public let nxtChangeRate: String?
     public let nxtChangeAmount: String?
+    public let nxtLabel: String?
     public let isNxtRising: Bool
     public let isNxtFalling: Bool
     public let isNxtOpen: Bool
@@ -75,6 +76,7 @@ public struct Stock: Identifiable, Codable {
         isNxtFalling: Bool,
         isNxtOpen: Bool,
         isMainOpen: Bool,
+        nxtLabel: String? = nil,
         quantity: Int? = nil,
         averagePrice: Double? = nil
     ) {
@@ -89,6 +91,7 @@ public struct Stock: Identifiable, Codable {
         self.nxtPrice = nxtPrice
         self.nxtChangeRate = nxtChangeRate
         self.nxtChangeAmount = nxtChangeAmount
+        self.nxtLabel = nxtLabel
         self.isNxtRising = isNxtRising
         self.isNxtFalling = isNxtFalling
         self.isNxtOpen = isNxtOpen
@@ -130,6 +133,9 @@ public struct Stock: Identifiable, Codable {
     }
     
     public var changeAmountDouble: Double {
+        if !isMainOpen, let nxtAmount = nxtChangeAmount {
+            return signedValue(nxtAmount, falling: isNxtFalling)
+        }
         return signedValue(changeAmount, falling: isFalling)
     }
     
@@ -144,16 +150,12 @@ public struct Stock: Identifiable, Codable {
     
     public var dailyGain: Double {
         guard let quantity = quantity else { return 0.0 }
-        var change = changeAmountDouble
-        if isFalling && change > 0 { change = -change }
-        return change * Double(quantity)
+        return changeAmountDouble * Double(quantity)
     }
     
     public var nxtDailyGain: Double {
         guard let quantity = quantity else { return 0.0 }
-        var change = nxtChangeAmountDouble
-        if isNxtFalling && change > 0 { change = -change }
-        return change * Double(quantity)
+        return nxtChangeAmountDouble * Double(quantity)
     }
     
     public var totalGain: Double? {
@@ -219,6 +221,9 @@ public struct YahooMeta: Codable {
     public let longName: String?
     public let shortName: String?
     public let instrumentType: String?
+    public let marketState: String?
+    public let preMarketPrice: Double?
+    public let postMarketPrice: Double?
 }
 
 public struct YahooSearchResponse: Codable {
